@@ -168,9 +168,10 @@ export class PurchaseWorkflow {
       });
 
       if (result.status === 'success') {
-        state.phase = 'documentation';
+        state.phase = 'completed';
         state.metadata.documentation = result.data;
         this.recordProgress(userId, 'documentation', 'completed', result.data);
+        this.recordProgress(userId, 'completion', 'completed', { status: 'workflow completed' });
       } else {
         this.recordProgress(userId, 'documentation', 'pending', { error: result.error });
       }
