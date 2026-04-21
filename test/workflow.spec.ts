@@ -133,6 +133,15 @@ describe('PurchaseWorkflow', () => {
 
     await workflow.negotiate(userId, selectedProperty);
     expect(workflow.getState(userId).phase).toBe('documentation');
+
+    const documentationResult = await workflow.manageDocumentation(
+      userId,
+      selectedProperty.propertyType,
+      'italy',
+      ['Certificato di proprietà'],
+    );
+    expect(documentationResult.status).toBe('success');
+    expect(workflow.getState(userId).phase).toBe('completed');
   });
 
   it('Should generate progress history', async () => {
