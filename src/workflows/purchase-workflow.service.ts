@@ -67,6 +67,7 @@ export class PurchaseWorkflow {
       const result = await this.searchAgent.execute(searchCriteria);
 
       if (result.status === 'success') {
+        state.phase = 'evaluation';
         state.metadata.searchResults = result.data;
         this.recordProgress(userId, 'search', 'completed', result.data);
       } else {
@@ -94,7 +95,7 @@ export class PurchaseWorkflow {
       const result = await this.evaluationAgent.execute({ property });
 
       if (result.status === 'success') {
-        state.phase = 'evaluation';
+        state.phase = 'negotiation';
         state.propertyId = property.id;
         state.metadata.evaluation = result.data;
         this.recordProgress(userId, 'evaluation', 'completed', result.data);
@@ -130,7 +131,7 @@ export class PurchaseWorkflow {
       });
 
       if (result.status === 'success') {
-        state.phase = 'negotiation';
+        state.phase = 'documentation';
         state.metadata.negotiationStrategy = result.data;
         this.recordProgress(userId, 'negotiation', 'completed', result.data);
       } else {

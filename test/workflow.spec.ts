@@ -18,7 +18,6 @@ import { Property } from '@models/types';
 
 describe('PurchaseWorkflow', () => {
   let workflow: PurchaseWorkflow;
-  let searchService: SearchService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -38,7 +37,6 @@ describe('PurchaseWorkflow', () => {
     }).compile();
 
     workflow = module.get<PurchaseWorkflow>(PurchaseWorkflow);
-    searchService = module.get<SearchService>(SearchService);
   });
 
   it('Should be defined', () => {
@@ -84,6 +82,7 @@ describe('PurchaseWorkflow', () => {
 
     expect(result.status).toBe('success');
     expect(result.data).toBeDefined();
+    expect(workflow.getState(userId).phase).toBe('evaluation');
   });
 
   it('Should complete evaluation phase', async () => {
@@ -108,6 +107,32 @@ describe('PurchaseWorkflow', () => {
 
     expect(result.status).toBe('success');
     expect(result.data).toBeDefined();
+    expect(workflow.getState(userId).phase).toBe('negotiation');
+  });
+
+  it('Should progress phases sequentially across agents', async () => {
+    const userId = 'user-sequential-phase-test';
+    await workflow.start({
+      userId,
+      preferences: {},
+    });
+
+    const searchResult = await workflow.search(userId, {
+      location: 'Milano',
+      budgetMin: 200000,
+      budgetMax: 500000,
+    });
+    expect(searchResult.status).toBe('success');
+    expect(workflow.getState(userId).phase).toBe('evaluation');
+
+    const selectedProperty = ((searchResult.data as { properties?: Property[] })?.properties || [])[0];
+    expect(selectedProperty).toBeDefined();
+
+    await workflow.evaluate(userId, selectedProperty);
+    expect(workflow.getState(userId).phase).toBe('negotiation');
+
+    await workflow.negotiate(userId, selectedProperty);
+    expect(workflow.getState(userId).phase).toBe('documentation');
   });
 
   it('Should generate progress history', async () => {
