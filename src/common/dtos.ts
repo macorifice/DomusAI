@@ -9,15 +9,15 @@ import { IsString, IsNumber, IsOptional, IsArray, IsEmail, Min, Max } from 'clas
  */
 export class SearchPropertyDto {
   @IsString()
-  location: string;
+  location: string = '';
 
   @IsNumber()
   @Min(0)
-  budgetMin: number;
+  budgetMin!: number;
 
   @IsNumber()
   @Min(0)
-  budgetMax: number;
+  budgetMax!: number;
 
   @IsOptional()
   @IsString()
@@ -48,21 +48,21 @@ export class SearchPropertyDto {
  */
 export class UserProfileDto {
   @IsEmail()
-  email: string;
+  email!: string;
 
   @IsString()
-  name: string;
+  name!: string;
 
   @IsNumber()
   @Min(0)
-  budgetMin: number;
+  budgetMin!: number;
 
   @IsNumber()
   @Min(0)
-  budgetMax: number;
+  budgetMax!: number;
 
   @IsArray()
-  preferredLocations: string[];
+  preferredLocations!: string[];
 
   @IsOptional()
   @IsString()
@@ -86,10 +86,10 @@ export class UserProfileDto {
  */
 export class PropertyEvaluationDto {
   @IsString()
-  propertyId: string;
+  propertyId!: string;
 
   @IsNumber()
-  askingPrice: number;
+  askingPrice!: number;
 
   @IsOptional()
   @IsString()
@@ -101,11 +101,11 @@ export class PropertyEvaluationDto {
  */
 export class NegotiationDto {
   @IsString()
-  propertyId: string;
+  propertyId!: string;
 
   @IsNumber()
   @Min(0)
-  suggestedOfferPrice: number;
+  suggestedOfferPrice!: number;
 
   @IsOptional()
   @IsArray()
@@ -121,13 +121,13 @@ export class NegotiationDto {
  */
 export class DocumentationDto {
   @IsString()
-  propertyId: string;
+  propertyId!: string;
 
   @IsString()
-  propertyType: string; // apartment, house, villa
+  propertyType!: string; // apartment, house, villa
 
   @IsString()
-  region: string;
+  region!: string;
 
   @IsOptional()
   @IsArray()

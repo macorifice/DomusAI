@@ -163,7 +163,12 @@ export class EvaluationService {
   /**
    * Valuta i rischi
    */
-  private assessRisks(property: Property, priceDeviation: number, condition: string): Record<string, string> {
+  private assessRisks(property: Property, priceDeviation: number, condition: string): {
+    priceRisk: string;
+    structuralRisk: string;
+    locationRisk: string;
+    marketRisk: string;
+  } {
     const risks = {
       priceRisk: priceDeviation > 10 ? 'HIGH - Prezzo superiore al mercato' : priceDeviation < -10 ? 'LOW - Prezzo vantaggioso' : 'MEDIUM - Prezzo in linea',
       structuralRisk: condition === 'poor' ? 'HIGH - Proprietà vecchia' : condition === 'fair' ? 'MEDIUM - Verificare' : 'LOW - Buone condizioni',
