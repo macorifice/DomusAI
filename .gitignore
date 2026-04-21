@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Production
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.iml
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Logging
+logs/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jest
+.jest/
+
