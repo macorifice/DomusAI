@@ -84,6 +84,7 @@ describe('PurchaseWorkflow', () => {
 
     expect(result.status).toBe('success');
     expect(result.data).toBeDefined();
+    expect(workflow.getState(userId).phase).toBe('evaluation');
   });
 
   it('Should complete evaluation phase', async () => {
@@ -108,6 +109,31 @@ describe('PurchaseWorkflow', () => {
 
     expect(result.status).toBe('success');
     expect(result.data).toBeDefined();
+    expect(workflow.getState(userId).phase).toBe('negotiation');
+  });
+
+  it('Should progress phases sequentially across agents', async () => {
+    const userId = 'user-sequential-phase-test';
+    await workflow.start({
+      userId,
+      preferences: {},
+    });
+
+    await workflow.search(userId, {
+      location: 'Milano',
+      budgetMin: 200000,
+      budgetMax: 500000,
+    });
+    expect(workflow.getState(userId).phase).toBe('evaluation');
+
+    const selectedProperty = searchService.getSampleProperties()[0];
+    expect(selectedProperty).toBeDefined();
+
+    await workflow.evaluate(userId, selectedProperty);
+    expect(workflow.getState(userId).phase).toBe('negotiation');
+
+    await workflow.negotiate(userId, selectedProperty);
+    expect(workflow.getState(userId).phase).toBe('documentation');
   });
 
   it('Should generate progress history', async () => {
