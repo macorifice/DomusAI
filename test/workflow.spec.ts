@@ -8,31 +8,30 @@ import { SearchAgent } from '@agents/search.agent';
 import { EvaluationAgent } from '@agents/evaluation.agent';
 import { NegotiationAgent } from '@agents/negotiation.agent';
 import { DocumentationAgent } from '@agents/documentation.agent';
-import { PropertyLocator } from '@tools/property-locator.service';
-import { MarketAnalyzer } from '@tools/market-analyzer.service';
-import { DocumentChecker } from '@tools/document-checker.service';
-import { SearchService } from '@common/search.service';
+import { ToolsModule } from '@tools/tools.module';
+import { CommonModule } from '@common/common.module';
 import { EvaluationService } from '@common/evaluation.service';
 import { NegotiationService } from '@common/negotiation.service';
 import { Property } from '@models/types';
+import { WorkflowChecklistService } from '@workflows/workflow-checklist.service';
+import { WorkflowChecklistRepository } from '@workflows/workflow-checklist.repository';
 
 describe('PurchaseWorkflow', () => {
   let workflow: PurchaseWorkflow;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
+      imports: [ToolsModule, CommonModule],
       providers: [
         PurchaseWorkflow,
         SearchAgent,
         EvaluationAgent,
         NegotiationAgent,
         DocumentationAgent,
-        PropertyLocator,
-        MarketAnalyzer,
-        DocumentChecker,
-        SearchService,
         EvaluationService,
         NegotiationService,
+        WorkflowChecklistService,
+        WorkflowChecklistRepository,
       ],
     }).compile();
 
@@ -108,6 +107,40 @@ describe('PurchaseWorkflow', () => {
     expect(result.status).toBe('success');
     expect(result.data).toBeDefined();
     expect(workflow.getState(userId).phase).toBe('negotiation');
+  });
+
+  it('Should add mortgage suspensive clause when requiresMortgage is true', async () => {
+    const userId = 'user-mortgage-test';
+    await workflow.start({
+      userId,
+      preferences: {
+        requiresMortgage: true,
+        dealType: 'compromesso',
+      },
+    });
+
+    const mockProperty: Property = {
+      id: 'prop-test-002',
+      address: 'Via Test, Milano',
+      price: 350000,
+      area: 120,
+      rooms: 3,
+      bathrooms: 2,
+      yearBuilt: 2015,
+      propertyType: 'apartment',
+    };
+
+    // Evaluation is required to populate `state.metadata.evaluation`,
+    // which is used by the negotiation phase to derive `marketValue`.
+    await workflow.evaluate(userId, mockProperty);
+
+    const negotiationResult = await workflow.negotiate(userId, mockProperty);
+    expect(negotiationResult.status).toBe('success');
+
+    const contingencies = (negotiationResult.data as any)?.contingencies;
+    expect(Array.isArray(contingencies)).toBe(true);
+    expect(contingencies.length).toBeGreaterThan(0);
+    expect(contingencies[0].type).toBe('mortgage_approval_suspensive_clause');
   });
 
   it('Should progress phases sequentially across agents', async () => {

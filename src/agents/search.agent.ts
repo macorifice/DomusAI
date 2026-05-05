@@ -4,19 +4,20 @@
 
 import { Injectable } from '@nestjs/common';
 import { BaseAgent } from './base.agent';
-import { ExecutionResult, Property } from '@models/types';
-import { SearchService } from '@common/search.service';
+import { ExecutionResult } from '@models/types';
+import { PropertyLocator } from '@tools/property-locator.service';
 
 export interface SearchAgentResult {
-  properties: Property[];
+  properties: unknown[];
   total: number;
-  searchTime: number;
+  searchTime?: number;
   criteria: Record<string, any>;
+  cache: 'hit' | 'miss';
 }
 
 @Injectable()
 export class SearchAgent extends BaseAgent {
-  constructor(private readonly searchService: SearchService) {
+  constructor(private readonly propertyLocator: PropertyLocator) {
     super(
       'SearchAgent',
       'Agente specializzato nella ricerca intelligente di proprietà immobiliari',
@@ -33,7 +34,7 @@ export class SearchAgent extends BaseAgent {
         };
       }
 
-      const result = await this.searchService.search({
+      const result = await this.propertyLocator.searchDetailed({
         location: input.location,
         budgetMin: input.budgetMin,
         budgetMax: input.budgetMax,
@@ -49,8 +50,8 @@ export class SearchAgent extends BaseAgent {
         data: {
           properties: result.properties,
           total: result.total,
-          searchTime: result.searchTime,
-          criteria: result.appliedFilters,
+          criteria: input,
+          cache: result.cache,
         },
         timestamp: new Date(),
       };

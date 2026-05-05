@@ -29,7 +29,12 @@ export class NegotiationAgent extends BaseAgent {
       const property: Property = input.property;
       const marketValue = input.marketValue || input.estimatedValue || property.price;
 
-      const strategy = await this.negotiationService.generateStrategy(property, marketValue);
+      const dealContext = input.dealContext ?? {
+        requiresMortgage: input.requiresMortgage,
+        dealType: input.dealType,
+      };
+
+      const strategy = await this.negotiationService.generateStrategy(property, marketValue, dealContext);
 
       return {
         status: 'success',
