@@ -16,5 +16,6 @@ module.exports = {
     '^@common/(.*)$': '<rootDir>/src/common/$1',
     '^@cache/(.*)$': '<rootDir>/src/cache/$1',
     '^@search-rules/(.*)$': '<rootDir>/src/search-rules/$1',
+    '^@auth/(.*)$': '<rootDir>/src/auth/$1',
   },
 };

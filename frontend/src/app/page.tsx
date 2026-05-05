@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { workflowApi, type AgentInfo, type WorkflowChecklist, type WorkflowPhase, type WorkflowState } from '@/lib/api';
+import type { Session } from '@supabase/supabase-js';
+import { workflowApi, setWorkflowApiAccessTokenGetter, type AgentInfo, type WorkflowChecklist, type WorkflowPhase, type WorkflowState } from '@/lib/api';
+import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
+import { AuthPanel } from '@/components/AuthPanel';
 import { WorkflowControls } from '@/components/WorkflowControls';
 import { ChecklistPanel } from '@/components/ChecklistPanel';
 import { AgentsPanel } from '@/components/AgentsPanel';
@@ -174,6 +177,33 @@ function formatCurrency(value?: number) {
   return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value);
 }
 
+/** Converte il codice tecnico `market.marketPosition` del backend in testo leggibile (dettaglio annuncio). */
+function formatMarketPositionLabel(raw?: string): string | undefined {
+  if (!raw?.trim()) return undefined;
+  const key = raw.trim().toLowerCase();
+  const labels: Record<string, string> = {
+    under_market: 'Sotto la media di zona — prezzo potenzialmente conveniente',
+    fair_market: 'In linea con la media di zona — prezzo coerente con il mercato',
+    over_market: 'Sopra la media di zona — prezzo più alto del confronto zona',
+  };
+  return labels[key] ?? raw.replace(/_/g, ' ');
+}
+
+/**
+ * URL embed OpenStreetMap (iframe) — bbox + marker sul punto.
+ * @see https://wiki.openstreetmap.org/wiki/Browsing#Embedding_a_map
+ */
+function openStreetMapEmbedSrc(latitude: number, longitude: number, spanDeg = 0.028): string {
+  const half = spanDeg / 2;
+  const minLon = longitude - half;
+  const minLat = latitude - half;
+  const maxLon = longitude + half;
+  const maxLat = latitude + half;
+  const bbox = `${minLon},${minLat},${maxLon},${maxLat}`;
+  const marker = `${latitude}%2F${longitude}`;
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${marker}`;
+}
+
 export default function Page() {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [workflowState, setWorkflowState] = useState<WorkflowState | null>(null);
@@ -198,7 +228,10 @@ export default function Page() {
   const [minScore, setMinScore] = useState(0);
   const [overlay, setOverlay] = useState<OverlayState>({ isOpen: false, type: null, payload: null });
   const [overlayImageIndex, setOverlayImageIndex] = useState(0);
+  const [session, setSession] = useState<Session | null>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
+
+  const isAuthenticated = Boolean(session?.user?.id);
 
   const currentPhase: WorkflowPhase = workflowState?.phase || 'search';
   const nextAction = useMemo(() => phaseActionMap[currentPhase], [currentPhase]);
@@ -275,6 +308,44 @@ export default function Page() {
   }
 
   useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+
+    if (supabase) {
+      setWorkflowApiAccessTokenGetter(async () => {
+        const { data } = await supabase.auth.getSession();
+        return data.session?.access_token ?? null;
+      });
+    } else {
+      setWorkflowApiAccessTokenGetter(null);
+    }
+
+    let cancelled = false;
+    if (supabase) {
+      void supabase.auth.getSession().then(({ data }) => {
+        if (cancelled) return;
+        setSession(data.session);
+        setSelectedUserId(data.session?.user?.id ?? '');
+      });
+
+      const { data } = supabase.auth.onAuthStateChange((_evt, nextSession) => {
+        if (cancelled) return;
+        setSession(nextSession);
+        setSelectedUserId(nextSession?.user?.id ?? '');
+      });
+      return () => {
+        cancelled = true;
+        data.subscription.unsubscribe();
+        setWorkflowApiAccessTokenGetter(null);
+      };
+    }
+
+    return () => {
+      cancelled = true;
+      setWorkflowApiAccessTokenGetter(null);
+    };
+  }, []);
+
+  useEffect(() => {
     workflowApi.getAgents().then(setAgents).catch(() => setError('Impossibile caricare gli agenti'));
   }, []);
 
@@ -290,7 +361,7 @@ export default function Page() {
   }, [overlay.isOpen]);
 
   async function refreshState(userId = selectedUserId) {
-    if (!userId) return;
+    if (!userId || !isAuthenticated) return;
     const [state, progress, checklistPayload] = await Promise.all([
       workflowApi.getState(userId),
       workflowApi.getHistory(userId),
@@ -306,7 +377,6 @@ export default function Page() {
     setError('');
     try {
       const state = await workflowApi.startWorkflow({
-        userId: selectedUserId || undefined,
         preferences: { location, budgetMin: Number(budgetMin), budgetMax: Number(budgetMax), requiresMortgage, dealType },
       });
       setSelectedUserId(state.userId);
@@ -320,7 +390,7 @@ export default function Page() {
   }
 
   async function runPhase() {
-    if (!selectedUserId) return;
+    if (!selectedUserId || !isAuthenticated) return;
     setLoading(true);
     setError('');
     try {
@@ -345,7 +415,7 @@ export default function Page() {
   }
 
   async function toggleStep(stepId: string, done: boolean) {
-    if (!selectedUserId) return;
+    if (!selectedUserId || !isAuthenticated) return;
     setLoading(true);
     setError('');
     try {
@@ -370,19 +440,22 @@ export default function Page() {
         </p>
       </section>
 
+      <AuthPanel session={session} />
+
       {viewMode === 'guided' ? (
         <div className={styles.wizardStack}>
           <section className={styles.wizardSection}>
             <p className={styles.wizardStep}>STEP 1</p>
             <WorkflowControls
               selectedUserId={selectedUserId}
+              isAuthenticated={isAuthenticated}
               location={location}
               budgetMin={budgetMin}
               budgetMax={budgetMax}
               requiresMortgage={requiresMortgage}
               dealType={dealType}
               loading={loading}
-              canRun={Boolean(selectedUserId)}
+              canRun={Boolean(selectedUserId && isAuthenticated)}
               nextActionLabel={nextAction.label}
               error={error}
               blockedByChecklist={blockedByChecklist}
@@ -395,7 +468,7 @@ export default function Page() {
               onDealTypeChange={setDealType}
               onStart={startWorkflow}
               onRunPhase={runPhase}
-              onRefresh={() => refreshState()}
+              onRefresh={() => void refreshState()}
               currentPhase={currentPhase}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
@@ -579,8 +652,15 @@ export default function Page() {
             </div>
             <div className={styles.row}>
               <label className={styles.field}>
-                User ID
-                <input value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} />
+                Utente workflow (sub)
+                <input
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  placeholder={isAuthenticated ? 'UUID Supabase' : 'Accedi per sbloccare il workflow'}
+                  disabled={!isAuthenticated}
+                  readOnly={isAuthenticated}
+                  aria-readonly={isAuthenticated}
+                />
               </label>
               <label className={styles.field}>
                 Location
@@ -588,13 +668,13 @@ export default function Page() {
               </label>
             </div>
             <div className={styles.actions}>
-              <button className={styles.primary} onClick={startWorkflow} disabled={loading}>
+              <button className={styles.primary} onClick={startWorkflow} disabled={loading || !isAuthenticated}>
                 Start
               </button>
-              <button onClick={runPhase} disabled={loading || !selectedUserId || blockedByChecklist}>
+              <button onClick={runPhase} disabled={loading || !selectedUserId || !isAuthenticated || blockedByChecklist}>
                 {nextAction.label}
               </button>
-              <button onClick={() => refreshState()} disabled={loading || !selectedUserId}>
+              <button onClick={() => void refreshState()} disabled={loading || !selectedUserId || !isAuthenticated}>
                 Refresh
               </button>
             </div>
@@ -776,7 +856,18 @@ export default function Page() {
                   <span className={styles.scoreChip}>
                     {overlay.payload.score ? `DomusScore ${Math.round(overlay.payload.score)}` : 'DomusScore n/d'}
                   </span>
-                  {overlay.payload.marketPosition ? <span>{overlay.payload.marketPosition}</span> : null}
+                  {(() => {
+                    const marketLabel = formatMarketPositionLabel(overlay.payload.marketPosition);
+                    if (!marketLabel) return null;
+                    return (
+                      <span
+                        className={styles.marketPositionHint}
+                        title="Stima DomusAI: confronto tra prezzo dell'annuncio e media di zona (dati zona-pricing)."
+                      >
+                        {marketLabel}
+                      </span>
+                    );
+                  })()}
                 </div>
                 {overlay.payload.description ? <p className={styles.overlayDescription}>{overlay.payload.description}</p> : null}
                 {overlay.payload.amenities?.length ? (
@@ -790,9 +881,45 @@ export default function Page() {
                 ) : null}
                 {overlay.payload.negotiationHint ? <p className={styles.muted}>{overlay.payload.negotiationHint}</p> : null}
                 {typeof overlay.payload.latitude === 'number' && typeof overlay.payload.longitude === 'number' ? (
-                  <p className={styles.muted}>
-                    Coordinate: {overlay.payload.latitude.toFixed(4)}, {overlay.payload.longitude.toFixed(4)}
-                  </p>
+                  <div
+                    className={styles.coordinatesBlock}
+                    title="Valori geografici forniti dall’annuncio o dall’aggregatore; possono essere indicativi."
+                  >
+                    <p className={styles.coordinatesTitle}>Posizione sulla mappa</p>
+                    <p className={styles.coordinatesValues}>
+                      <span>
+                        Lat{' '}
+                        <strong>{overlay.payload.latitude.toFixed(5)}</strong>°
+                      </span>
+                      <span className={styles.coordinatesDot} aria-hidden>
+                        ·
+                      </span>
+                      <span>
+                        Lon{' '}
+                        <strong>{overlay.payload.longitude.toFixed(5)}</strong>°
+                      </span>
+                    </p>
+                    <div className={styles.mapPreviewWrap}>
+                      <iframe
+                        className={styles.mapPreviewFrame}
+                        title="Anteprima mappa: posizione indicativa dell’annuncio"
+                        src={openStreetMapEmbedSrc(overlay.payload.latitude, overlay.payload.longitude)}
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                      />
+                    </div>
+                    <p className={styles.mapAttribution}>
+                      Anteprima{' '}
+                      <a
+                        href="https://www.openstreetmap.org/copyright"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.mapAttributionLink}
+                      >
+                        © OpenStreetMap
+                      </a>
+                    </p>
+                  </div>
                 ) : null}
               </>
             ) : (

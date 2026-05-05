@@ -23,7 +23,8 @@
       "@tools/*": ["src/tools/*"],
       "@common/*": ["src/common/*"],
       "@cache/*": ["src/cache/*"],
-      "@search-rules/*": ["src/search-rules/*"]
+      "@search-rules/*": ["src/search-rules/*"],
+      "@auth/*": ["src/auth/*"]
     }
   },
   "include": ["src/**/*"],

@@ -1,4 +1,17 @@
-import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Post } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  NotFoundException,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { JwtSub } from '@auth/jwt-sub.decorator';
+import { Public } from '@auth/public.decorator';
+import { SupabaseJwtGuard } from '@auth/supabase-jwt.guard';
 import { PurchaseWorkflow } from './purchase-workflow.service';
 import { Property } from '@models/types';
 import { SearchAgent } from '@agents/search.agent';
@@ -7,6 +20,7 @@ import { NegotiationAgent } from '@agents/negotiation.agent';
 import { DocumentationAgent } from '@agents/documentation.agent';
 
 interface StartWorkflowBody {
+  /** @deprecated Ignorato: l'utente è il `sub` del JWT. */
   userId?: string;
   preferences?: Record<string, unknown>;
 }
@@ -36,6 +50,7 @@ interface ChecklistStepStatusBody {
 }
 
 @Controller('workflow')
+@UseGuards(SupabaseJwtGuard)
 export class WorkflowsController {
   constructor(
     private readonly workflow: PurchaseWorkflow,
@@ -45,6 +60,7 @@ export class WorkflowsController {
     private readonly documentationAgent: DocumentationAgent,
   ) {}
 
+  @Public()
   @Get('agents')
   getAgents() {
     return [
@@ -56,17 +72,16 @@ export class WorkflowsController {
   }
 
   @Post('start')
-  async start(@Body() body: StartWorkflowBody) {
-    const userId = body.userId?.trim() || `user-${Date.now()}`;
-
+  async start(@Body() body: StartWorkflowBody, @JwtSub() sub: string) {
     return this.workflow.start({
-      userId,
+      userId: sub,
       preferences: body.preferences || {},
     });
   }
 
   @Post(':id/search')
-  async search(@Param('id') userId: string, @Body() body: SearchBody) {
+  async search(@Param('id') paramId: string, @JwtSub() sub: string, @Body() body: SearchBody) {
+    const userId = this.ensureRouteUser(paramId, sub);
     return this.workflow.search(userId, {
       location: body.location || 'Milano',
       budgetMin: body.budgetMin ?? 200000,
@@ -83,8 +98,9 @@ export class WorkflowsController {
   }
 
   @Post(':id/evaluate')
-  async evaluate(@Param('id') userId: string, @Body() body: { property?: Property }) {
-    const state = this.getExistingState(userId);
+  async evaluate(@Param('id') paramId: string, @JwtSub() sub: string, @Body() body: { property?: Property }) {
+    const userId = this.ensureRouteUser(paramId, sub);
+    const state = await this.loadExistingState(userId);
     await this.ensureMandatoryChecklistCompleted(userId);
     const fromSearch = state.metadata.searchResults?.properties?.[0] as Property | undefined;
     const property = body.property || fromSearch;
@@ -97,8 +113,9 @@ export class WorkflowsController {
   }
 
   @Post(':id/negotiate')
-  async negotiate(@Param('id') userId: string, @Body() body: { property?: Property }) {
-    const state = this.getExistingState(userId);
+  async negotiate(@Param('id') paramId: string, @JwtSub() sub: string, @Body() body: { property?: Property }) {
+    const userId = this.ensureRouteUser(paramId, sub);
+    const state = await this.loadExistingState(userId);
     await this.ensureMandatoryChecklistCompleted(userId);
     const fromSearch = state.metadata.searchResults?.properties?.[0] as Property | undefined;
     const property = body.property || fromSearch;
@@ -111,7 +128,8 @@ export class WorkflowsController {
   }
 
   @Post(':id/documentation')
-  async documentation(@Param('id') userId: string, @Body() body: DocumentationBody) {
+  async documentation(@Param('id') paramId: string, @JwtSub() sub: string, @Body() body: DocumentationBody) {
+    const userId = this.ensureRouteUser(paramId, sub);
     await this.ensureMandatoryChecklistCompleted(userId);
     return this.workflow.manageDocumentation(
       userId,
@@ -122,37 +140,44 @@ export class WorkflowsController {
   }
 
   @Post(':id/complete')
-  async complete(@Param('id') userId: string) {
+  async complete(@Param('id') paramId: string, @JwtSub() sub: string) {
+    const userId = this.ensureRouteUser(paramId, sub);
     return this.workflow.complete(userId);
   }
 
   @Get(':id/state')
-  getState(@Param('id') userId: string) {
-    return this.getExistingState(userId);
+  async getStateEndpoint(@Param('id') paramId: string, @JwtSub() sub: string) {
+    const userId = this.ensureRouteUser(paramId, sub);
+    return this.loadExistingState(userId);
   }
 
   @Get(':id/history')
-  getHistory(@Param('id') userId: string) {
+  async getHistory(@Param('id') paramId: string, @JwtSub() sub: string) {
+    const userId = this.ensureRouteUser(paramId, sub);
+    await this.loadExistingState(userId);
     return this.workflow.getProgress(userId);
   }
 
   @Get(':id/checklist')
-  async getChecklist(@Param('id') userId: string) {
-    this.getExistingState(userId);
+  async getChecklist(@Param('id') paramId: string, @JwtSub() sub: string) {
+    const userId = this.ensureRouteUser(paramId, sub);
+    await this.loadExistingState(userId);
     return this.workflow.getChecklist(userId);
   }
 
   @Post(':id/checklist/:stepId/status')
   async setChecklistStepStatus(
-    @Param('id') userId: string,
+    @Param('id') paramId: string,
     @Param('stepId') stepId: string,
+    @JwtSub() sub: string,
     @Body() body: ChecklistStepStatusBody,
   ) {
     if (typeof body.done !== 'boolean') {
       throw new BadRequestException('Il campo `done` deve essere booleano');
     }
 
-    this.getExistingState(userId);
+    const userId = this.ensureRouteUser(paramId, sub);
+    await this.loadExistingState(userId);
     try {
       return await this.workflow.setChecklistStepStatus(userId, stepId, body.done);
     } catch (error) {
@@ -160,9 +185,16 @@ export class WorkflowsController {
     }
   }
 
-  private getExistingState(userId: string) {
+  private ensureRouteUser(paramId: string, sub: string): string {
+    if (paramId !== sub) {
+      throw new ForbiddenException("L'ID nel percorso deve coincidere con l'utente autenticato");
+    }
+    return sub;
+  }
+
+  private async loadExistingState(userId: string) {
     try {
-      return this.workflow.getState(userId);
+      return await this.workflow.getState(userId);
     } catch {
       throw new NotFoundException(`Workflow non trovato per l'utente ${userId}`);
     }
