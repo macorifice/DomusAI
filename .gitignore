@@ -4,10 +4,9 @@ node_modules/
 # Production
 dist/
 build/
+**/.next/
 
 # Environment
-.env
-.env.local
 .env.*.local
 
 # IDE
@@ -39,4 +38,3 @@ Thumbs.db
 frontend/node_modules/
 frontend/package-lock.json
 frontend/yarn.lock
-frontend/.next/
