@@ -41,6 +41,21 @@ export class SearchPropertyDto {
   @IsOptional()
   @IsArray()
   amenities?: string[];
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxPricePerSqm?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxRenovatedPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxToRenovatePrice?: number;
 }
 
 /**

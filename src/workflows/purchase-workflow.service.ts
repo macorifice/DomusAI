@@ -7,8 +7,10 @@ import { SearchAgent } from '@agents/search.agent';
 import { EvaluationAgent } from '@agents/evaluation.agent';
 import { NegotiationAgent } from '@agents/negotiation.agent';
 import { DocumentationAgent } from '@agents/documentation.agent';
-import { WorkflowState, Property, UserProfile, Transaction, ExecutionResult } from '@models/types';
+import { WorkflowState, Property, ExecutionResult } from '@models/types';
 import { Logger } from '@common/logger';
+import { WorkflowChecklistService, WorkflowChecklist } from './workflow-checklist.service';
+import { WorkflowChecklistRepository } from './workflow-checklist.repository';
 
 export interface WorkflowInput {
   userId: string;
@@ -33,6 +35,8 @@ export class PurchaseWorkflow {
     private readonly evaluationAgent: EvaluationAgent,
     private readonly negotiationAgent: NegotiationAgent,
     private readonly documentationAgent: DocumentationAgent,
+    private readonly workflowChecklistService: WorkflowChecklistService,
+    private readonly workflowChecklistRepository: WorkflowChecklistRepository,
   ) {}
 
   /**
@@ -69,6 +73,7 @@ export class PurchaseWorkflow {
       if (result.status === 'success') {
         state.phase = 'evaluation';
         state.metadata.searchResults = result.data;
+        state.metadata.checklist = this.workflowChecklistService.buildChecklist(state.metadata);
         this.recordProgress(userId, 'search', 'completed', result.data);
       } else {
         this.recordProgress(userId, 'search', 'pending', { error: result.error });
@@ -119,6 +124,9 @@ export class PurchaseWorkflow {
     const evaluation = state.metadata.evaluation;
     const marketValue = evaluation?.estimatedValue || property.price;
 
+    const requiresMortgage = state.metadata?.requiresMortgage === true;
+    const dealType = state.metadata?.dealType;
+
     this.logger.log(`Negotiation phase initiated for property: ${property.id}`);
 
     try {
@@ -128,6 +136,7 @@ export class PurchaseWorkflow {
         property,
         marketValue,
         estimatedValue: marketValue,
+        dealContext: { requiresMortgage, dealType },
       });
 
       if (result.status === 'success') {
@@ -211,6 +220,32 @@ export class PurchaseWorkflow {
    */
   getProgress(userId: string): WorkflowProgress[] {
     return this.history.get(userId) || [];
+  }
+
+  async getChecklist(userId: string): Promise<WorkflowChecklist> {
+    const state = this.getState(userId);
+    const fallback = this.workflowChecklistService.buildChecklist(state.metadata);
+    const baseChecklist = (state.metadata?.checklist || fallback) as typeof fallback;
+
+    const statuses = await this.workflowChecklistRepository.getStepStatuses(userId);
+    return this.workflowChecklistService.materializeChecklist(baseChecklist, state.phase, statuses);
+  }
+
+  async setChecklistStepStatus(userId: string, stepId: string, done: boolean): Promise<WorkflowChecklist> {
+    const state = this.getState(userId);
+    const fallback = this.workflowChecklistService.buildChecklist(state.metadata);
+    const baseChecklist = (state.metadata?.checklist || fallback) as typeof fallback;
+
+    if (!this.workflowChecklistService.hasStep(baseChecklist, stepId)) {
+      throw new Error(`Step non valido: ${stepId}`);
+    }
+
+    if (!this.workflowChecklistService.canUpdateStep(baseChecklist, state.phase, stepId)) {
+      throw new Error(`Step non disponibile nella fase corrente: ${stepId}`);
+    }
+
+    await this.workflowChecklistRepository.setStepStatus(userId, stepId, done);
+    return this.getChecklist(userId);
   }
 
   /**

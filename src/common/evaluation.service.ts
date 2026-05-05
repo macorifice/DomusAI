@@ -50,7 +50,7 @@ export class EvaluationService {
       const demand = this.estimateDemand(property);
 
       const risks = this.assessRisks(property, priceDeviation, condition);
-      const recommendations = this.generateRecommendations(property, priceDeviation, risks);
+      const recommendations = this.generateRecommendations(property, priceDeviation);
       const investmentScore = this.calculateInvestmentScore(property, priceDeviation, potential);
 
       return {
@@ -182,7 +182,7 @@ export class EvaluationService {
   /**
    * Genera raccomandazioni
    */
-  private generateRecommendations(property: Property, priceDeviation: number, risks: Record<string, string>): string[] {
+  private generateRecommendations(property: Property, priceDeviation: number): string[] {
     const recommendations: string[] = [];
 
     if (priceDeviation > 10) {

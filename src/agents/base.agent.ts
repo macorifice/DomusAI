@@ -2,7 +2,7 @@
  * Base Agent - Classe astratta per tutti gli agenti
  */
 
-import { ExecutionResult, WorkflowState } from '@models/types';
+import { ExecutionResult } from '@models/types';
 
 export abstract class BaseAgent {
   constructor(

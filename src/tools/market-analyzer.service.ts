@@ -25,7 +25,6 @@ export class MarketAnalyzer {
   async getMarketValue(property: Property): Promise<MarketValuation> {
     // TODO: Implementare modello di valutazione (machine learning, comparable sales, ecc.)
     const basePrice = property.price;
-    const pricePerSqm = basePrice / property.area;
 
     return {
       estimatedValue: basePrice,
@@ -40,6 +39,7 @@ export class MarketAnalyzer {
    * Analizza il mercato di una specifica area
    */
   async analyzeArea(location: string): Promise<AreaAnalysis> {
+    void location;
     // TODO: Implementare analisi di mercato locale
     return {
       averagePrice: 5000,
@@ -53,6 +53,7 @@ export class MarketAnalyzer {
    * Confronta con proprietà simili
    */
   async getComparables(property: Property): Promise<Property[]> {
+    void property;
     // TODO: Implementare ricerca di proprietà comparabili
     return [];
   }

@@ -20,6 +20,7 @@ export interface NegotiationStrategy {
   timeline: string;
   successProbability: number; // 0-100
   tips: string[];
+  contingencies?: NegotiationContingency[];
 }
 
 export interface NegotiationStep {
@@ -29,6 +30,12 @@ export interface NegotiationStep {
   negotiationPoints: string[];
 }
 
+export interface NegotiationContingency {
+  type: 'mortgage_approval_suspensive_clause';
+  label: string;
+  text: string;
+}
+
 @Injectable()
 export class NegotiationService {
   private readonly logger = new Logger('NegotiationService');
@@ -36,7 +43,11 @@ export class NegotiationService {
   /**
    * Genera una strategia di negoziazione
    */
-  async generateStrategy(property: Property, marketValue: number): Promise<NegotiationStrategy> {
+  async generateStrategy(
+    property: Property,
+    marketValue: number,
+    context?: { requiresMortgage?: boolean; dealType?: string },
+  ): Promise<NegotiationStrategy> {
     this.logger.log(`Generating negotiation strategy for property: ${property.id}`);
 
     try {
@@ -60,6 +71,7 @@ export class NegotiationService {
 
       const tips = this.generateNegotiationTips(property, strategyType);
       const successProbability = this.calculateSuccessProbability(property, priceDeviation, strategyType);
+      const contingencies = this.generateContingencies(context);
 
       return {
         propertyId: property.id,
@@ -72,6 +84,7 @@ export class NegotiationService {
         timeline: this.estimateTimeline(strategyType),
         successProbability,
         tips,
+        ...(contingencies.length > 0 ? { contingencies } : {}),
       };
     } catch (error) {
       this.logger.error('Error generating negotiation strategy', error as Error);
@@ -165,12 +178,11 @@ export class NegotiationService {
     estimatedClosing: number,
     strategy: string,
   ): NegotiationStep[] {
+    void strategy;
     const steps: NegotiationStep[] = [];
 
     const step1Price = firstOffer;
     const step2Price = Math.round(firstOffer + (initialPrice - firstOffer) * 0.3);
-    const step3Price = Math.round(firstOffer + (initialPrice - firstOffer) * 0.6);
-
     steps.push({
       step: 1,
       action: 'Presentare l\'offerta iniziale',
@@ -233,6 +245,33 @@ export class NegotiationService {
     }
 
     return tips;
+  }
+
+  /**
+   * Genera clausole/condizioni sospensive coerenti con il deal context.
+   * Nota: per ora supportiamo solo il caso mutuo approvato (clausola sospensiva).
+   */
+  private generateContingencies(
+    context?: { requiresMortgage?: boolean; dealType?: string },
+  ): NegotiationContingency[] {
+    const requiresMortgage = context?.requiresMortgage === true;
+    const dealType = context?.dealType;
+
+    if (!requiresMortgage) return [];
+
+    // La clausola sospensiva è tipicamente legata a compromesso/accordi preliminari.
+    const isCompatibleDeal =
+      !dealType || dealType === 'compromesso' || dealType === 'compromesso_finale' || dealType === 'preliminare';
+
+    if (!isCompatibleDeal) return [];
+
+    return [
+      {
+        type: 'mortgage_approval_suspensive_clause',
+        label: 'Clausola sospensiva per approvazione mutuo',
+        text: "Accordo subordinato all'approvazione del mutuo da parte dell'istituto di credito, con liberatoria/risoluzione automatica in assenza di esito positivo entro i termini concordati.",
+      },
+    ];
   }
 
   /**

@@ -21,7 +21,9 @@
       "@workflows/*": ["src/workflows/*"],
       "@models/*": ["src/models/*"],
       "@tools/*": ["src/tools/*"],
-      "@common/*": ["src/common/*"]
+      "@common/*": ["src/common/*"],
+      "@cache/*": ["src/cache/*"],
+      "@search-rules/*": ["src/search-rules/*"]
     }
   },
   "include": ["src/**/*"],

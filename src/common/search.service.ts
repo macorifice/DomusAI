@@ -84,6 +84,7 @@ export class SearchService {
    * Filtra per location
    */
   private applyLocationFilter(properties: Property[], location: string, radius: number): Property[] {
+    void radius;
     return properties.filter((p) => {
       const propertyLocation = p.address.toLowerCase();
       const searchLocation = location.toLowerCase();

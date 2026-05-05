@@ -18,12 +18,21 @@ interface SearchBody {
   propertyType?: string;
   rooms?: number;
   bathrooms?: number;
+  radius?: number;
+  amenities?: string[];
+  maxPricePerSqm?: number;
+  maxRenovatedPrice?: number;
+  maxToRenovatePrice?: number;
 }
 
 interface DocumentationBody {
   propertyType?: string;
   region?: string;
   documents?: string[];
+}
+
+interface ChecklistStepStatusBody {
+  done?: boolean;
 }
 
 @Controller('workflow')
@@ -65,12 +74,18 @@ export class WorkflowsController {
       propertyType: body.propertyType || 'apartment',
       rooms: body.rooms ?? 3,
       bathrooms: body.bathrooms ?? 2,
+      radius: body.radius ?? 10,
+      amenities: body.amenities ?? [],
+      maxPricePerSqm: body.maxPricePerSqm,
+      maxRenovatedPrice: body.maxRenovatedPrice,
+      maxToRenovatePrice: body.maxToRenovatePrice,
     });
   }
 
   @Post(':id/evaluate')
   async evaluate(@Param('id') userId: string, @Body() body: { property?: Property }) {
     const state = this.getExistingState(userId);
+    await this.ensureMandatoryChecklistCompleted(userId);
     const fromSearch = state.metadata.searchResults?.properties?.[0] as Property | undefined;
     const property = body.property || fromSearch;
 
@@ -84,6 +99,7 @@ export class WorkflowsController {
   @Post(':id/negotiate')
   async negotiate(@Param('id') userId: string, @Body() body: { property?: Property }) {
     const state = this.getExistingState(userId);
+    await this.ensureMandatoryChecklistCompleted(userId);
     const fromSearch = state.metadata.searchResults?.properties?.[0] as Property | undefined;
     const property = body.property || fromSearch;
 
@@ -96,6 +112,7 @@ export class WorkflowsController {
 
   @Post(':id/documentation')
   async documentation(@Param('id') userId: string, @Body() body: DocumentationBody) {
+    await this.ensureMandatoryChecklistCompleted(userId);
     return this.workflow.manageDocumentation(
       userId,
       body.propertyType || 'apartment',
@@ -119,11 +136,51 @@ export class WorkflowsController {
     return this.workflow.getProgress(userId);
   }
 
+  @Get(':id/checklist')
+  async getChecklist(@Param('id') userId: string) {
+    this.getExistingState(userId);
+    return this.workflow.getChecklist(userId);
+  }
+
+  @Post(':id/checklist/:stepId/status')
+  async setChecklistStepStatus(
+    @Param('id') userId: string,
+    @Param('stepId') stepId: string,
+    @Body() body: ChecklistStepStatusBody,
+  ) {
+    if (typeof body.done !== 'boolean') {
+      throw new BadRequestException('Il campo `done` deve essere booleano');
+    }
+
+    this.getExistingState(userId);
+    try {
+      return await this.workflow.setChecklistStepStatus(userId, stepId, body.done);
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : 'Aggiornamento checklist non valido');
+    }
+  }
+
   private getExistingState(userId: string) {
     try {
       return this.workflow.getState(userId);
     } catch {
       throw new NotFoundException(`Workflow non trovato per l'utente ${userId}`);
     }
+  }
+
+  private async ensureMandatoryChecklistCompleted(userId: string) {
+    const checklist = await this.workflow.getChecklist(userId);
+    const blocking = checklist.steps.filter(
+      (step) => step.state === 'available' && step.priority !== 'optional' && step.done !== true,
+    );
+
+    if (blocking.length === 0) {
+      return;
+    }
+
+    const blockingTitles = blocking.map((step) => step.title).join(', ');
+    throw new BadRequestException(
+      `Completa prima gli step obbligatori/raccomandati della fase corrente: ${blockingTitles}`,
+    );
   }
 }

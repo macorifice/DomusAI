@@ -14,7 +14,8 @@ DomusAI è un'applicazione basata su **agenti agentic workflow** costruita in **
 ## 🚀 Tecnologie
 
 - **Runtime**: Node.js
-- **Framework**: NestJS
+- **Backend**: NestJS
+- **Frontend**: Next.js (App Router, TypeScript) in `frontend/`
 - **Linguaggio**: TypeScript
 - **Testing**: Jest
 - **Build**: TypeScript Compiler
@@ -23,6 +24,9 @@ DomusAI è un'applicazione basata su **agenti agentic workflow** costruita in **
 
 ```
 domusai/
+├── frontend/               # UI Next.js App Router
+│   ├── src/app
+│   └── src/lib
 ├── src/
 │   ├── agents/              # Agenti intelligenti
 │   │   ├── search.agent.ts
@@ -89,6 +93,7 @@ SEARCH → EVALUATION → NEGOTIATION → DOCUMENTATION → COMPLETED
 ```bash
 # Installa dipendenze
 npm install
+npm install --prefix frontend
 
 # Copia il file .env
 cp .env.example .env
@@ -97,7 +102,10 @@ cp .env.example .env
 ### Sviluppo
 
 ```bash
-# Avvia il server in modalità watch
+# Avvia backend + frontend
+npm run start:dev:all
+
+# Oppure solo backend
 npm run start:dev
 
 # Esegui i test
@@ -110,10 +118,16 @@ npm run test:cov
 ### Build
 
 ```bash
-# Build per la produzione
+# Build backend
 npm run build
 
-# Avvia il bundle prodotto
+# Build frontend
+npm run build:frontend
+
+# Build completo
+npm run build:all
+
+# Avvia backend in produzione
 npm run start:prod
 ```
 
@@ -123,9 +137,17 @@ npm run start:prod
 # Lint il codice
 npm run lint
 
+# Lint frontend
+npm run lint:frontend
+
 # Formatta il codice
 npm run format
 ```
+
+### URL locali
+
+- Frontend Next.js: `http://localhost:3001`
+- API NestJS: `http://localhost:3000`
 
 ## 💡 Esempio di Utilizzo
 
@@ -172,8 +194,15 @@ await workflow.complete(userId);
 
 ```env
 # API Keys
-PROPERTY_API_KEY=your_api_key_here
+IDEALISTA_API_KEY=your_idealista_api_key
+IMMOBILIARE_API_KEY=your_immobiliare_api_key
+CASA_IT_API_KEY=your_casa_it_api_key
 MARKET_DATA_API_KEY=your_api_key_here
+
+# API URLs
+IDEALISTA_API_URL=https://api.idealista.com
+IMMOBILIARE_API_URL=https://api.immobiliare.it
+CASA_IT_API_URL=https://api.casa.it
 
 # LLM Configuration
 OPENAI_API_KEY=your_openai_key_here
@@ -183,9 +212,20 @@ LLM_MODEL=gpt-4
 APP_ENV=development
 APP_DEBUG=true
 LOG_LEVEL=DEBUG
+LISTING_CACHE_TTL_MS=300000
+
+# Supabase checklist persistence
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 ```
 
-## 📡 API Endpoints (Coming Soon)
+### Variabili Frontend (`frontend/.env.local`)
+
+```env
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
+```
+
+## 📡 API Endpoints
 
 ```
 POST   /workflow/start                  # Avvia workflow
@@ -195,13 +235,29 @@ POST   /workflow/:id/negotiate          # Negozia
 POST   /workflow/:id/documentation      # Gestisci docs
 GET    /workflow/:id/state              # Ottieni stato
 GET    /workflow/:id/history            # Ottieni cronologia
+POST   /properties/search               # Ricerca proprietà (Property Locator MVP)
+GET    /properties/:id                  # Dettaglio proprietà
 ```
+
+### Ricerca avanzata (nuovo payload)
+
+`/workflow/:id/search` e `/properties/search` supportano anche:
+
+- `maxPricePerSqm`: soglia massima di prezzo al mq
+- `maxRenovatedPrice`: soglia massima se immobile ristrutturato
+- `maxToRenovatePrice`: soglia massima se immobile da ristrutturare
+
+La risposta include:
+
+- `cache`: `hit` o `miss`
+- `rulesEvaluation`: esito regole condizionali per annuncio
+- `market`: posizionamento rispetto al prezzo medio di zona + hint negoziale
 
 ## 📚 Documentazione
 
 - [ARCHITECTURE.md](./docs/ARCHITECTURE.md) - Architettura dettagliata
 - [PHASES.md](./docs/PHASES.md) - Fasi del processo
-- [API.md](./docs/API.md) - Documentazione API (Coming Soon)
+- [API.md](./docs/API.md) - Documentazione API
 
 ## 🧪 Testing
 

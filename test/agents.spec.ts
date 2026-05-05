@@ -4,19 +4,18 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { SearchAgent } from '@agents/search.agent';
-import { PropertyLocator } from '@tools/property-locator.service';
+import { ToolsModule } from '@tools/tools.module';
 
 describe('SearchAgent', () => {
   let agent: SearchAgent;
-  let propertyLocator: PropertyLocator;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [SearchAgent, PropertyLocator],
+      imports: [ToolsModule],
+      providers: [SearchAgent],
     }).compile();
 
     agent = module.get<SearchAgent>(SearchAgent);
-    propertyLocator = module.get<PropertyLocator>(PropertyLocator);
   });
 
   it('Should be defined', () => {
