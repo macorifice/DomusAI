@@ -3,6 +3,7 @@ import styles from '@/app/page.module.css';
 
 interface WorkflowControlsProps {
   selectedUserId: string;
+  isAuthenticated: boolean;
   location: string;
   budgetMin: number;
   budgetMax: number;
@@ -30,6 +31,7 @@ interface WorkflowControlsProps {
 
 export function WorkflowControls({
   selectedUserId,
+  isAuthenticated,
   location,
   budgetMin,
   budgetMax,
@@ -85,8 +87,15 @@ export function WorkflowControls({
 
       <div className={styles.row}>
         <label className={styles.field}>
-          User ID
-          <input value={selectedUserId} onChange={(e) => onUserIdChange(e.target.value)} placeholder="es. user-demo-001" />
+          Utente workflow (sub)
+          <input
+            value={selectedUserId}
+            onChange={(e) => onUserIdChange(e.target.value)}
+            placeholder={isAuthenticated ? 'UUID Supabase' : 'Accedi per sbloccare il workflow'}
+            disabled={!isAuthenticated}
+            readOnly={isAuthenticated}
+            aria-readonly={isAuthenticated}
+          />
         </label>
         <label className={styles.field}>
           Location
@@ -134,7 +143,7 @@ export function WorkflowControls({
       </div>
 
       <div className={styles.actions}>
-        <button className={styles.primary} onClick={onStart} disabled={loading}>
+        <button className={styles.primary} onClick={onStart} disabled={loading || !isAuthenticated}>
           {loading ? 'Avvio...' : 'Avvia Workflow'}
         </button>
         <button onClick={onRunPhase} disabled={loading || !canRun || blockedByChecklist}>

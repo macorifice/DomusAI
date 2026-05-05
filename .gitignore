@@ -35,3 +35,8 @@ Thumbs.db
 # Jest
 .jest/
 
+# Frontend
+frontend/node_modules/
+frontend/package-lock.json
+frontend/yarn.lock
+frontend/.next/

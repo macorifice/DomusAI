@@ -15,6 +15,7 @@ import { NegotiationService } from '@common/negotiation.service';
 import { Property } from '@models/types';
 import { WorkflowChecklistService } from '@workflows/workflow-checklist.service';
 import { WorkflowChecklistRepository } from '@workflows/workflow-checklist.repository';
+import { WorkflowStateRepository } from '@workflows/workflow-state.repository';
 
 describe('PurchaseWorkflow', () => {
   let workflow: PurchaseWorkflow;
@@ -32,6 +33,7 @@ describe('PurchaseWorkflow', () => {
         NegotiationService,
         WorkflowChecklistService,
         WorkflowChecklistRepository,
+        WorkflowStateRepository,
       ],
     }).compile();
 
@@ -62,7 +64,7 @@ describe('PurchaseWorkflow', () => {
       preferences: {},
     });
 
-    const state = workflow.getState('user-456');
+    const state = await workflow.getState('user-456');
     expect(state.userId).toBe('user-456');
   });
 
@@ -81,7 +83,7 @@ describe('PurchaseWorkflow', () => {
 
     expect(result.status).toBe('success');
     expect(result.data).toBeDefined();
-    expect(workflow.getState(userId).phase).toBe('evaluation');
+    expect((await workflow.getState(userId)).phase).toBe('evaluation');
   });
 
   it('Should complete evaluation phase', async () => {
@@ -106,7 +108,7 @@ describe('PurchaseWorkflow', () => {
 
     expect(result.status).toBe('success');
     expect(result.data).toBeDefined();
-    expect(workflow.getState(userId).phase).toBe('negotiation');
+    expect((await workflow.getState(userId)).phase).toBe('negotiation');
   });
 
   it('Should add mortgage suspensive clause when requiresMortgage is true', async () => {
@@ -156,16 +158,16 @@ describe('PurchaseWorkflow', () => {
       budgetMax: 500000,
     });
     expect(searchResult.status).toBe('success');
-    expect(workflow.getState(userId).phase).toBe('evaluation');
+    expect((await workflow.getState(userId)).phase).toBe('evaluation');
 
     const selectedProperty = ((searchResult.data as { properties?: Property[] })?.properties || [])[0];
     expect(selectedProperty).toBeDefined();
 
     await workflow.evaluate(userId, selectedProperty);
-    expect(workflow.getState(userId).phase).toBe('negotiation');
+    expect((await workflow.getState(userId)).phase).toBe('negotiation');
 
     await workflow.negotiate(userId, selectedProperty);
-    expect(workflow.getState(userId).phase).toBe('documentation');
+    expect((await workflow.getState(userId)).phase).toBe('documentation');
 
     const documentationResult = await workflow.manageDocumentation(
       userId,
@@ -174,7 +176,7 @@ describe('PurchaseWorkflow', () => {
       ['Certificato di proprietà'],
     );
     expect(documentationResult.status).toBe('success');
-    expect(workflow.getState(userId).phase).toBe('completed');
+    expect((await workflow.getState(userId)).phase).toBe('completed');
   });
 
   it('Should generate progress history', async () => {
@@ -184,7 +186,7 @@ describe('PurchaseWorkflow', () => {
       preferences: {},
     });
 
-    const progress = workflow.getProgress(userId);
+    const progress = await workflow.getProgress(userId);
     expect(progress.length).toBeGreaterThan(0);
     expect(progress[0].phase).toBe('setup');
   });
@@ -207,8 +209,8 @@ describe('PurchaseWorkflow', () => {
       preferences: {},
     });
 
-    workflow.reset(userId);
+    await workflow.reset(userId);
 
-    expect(() => workflow.getState(userId)).toThrow();
+    await expect(workflow.getState(userId)).rejects.toThrow();
   });
 });

@@ -131,7 +131,7 @@ async function demonstrateWorkflow() {
   console.log(`Stato finale: ${finalState.phase}`);
 
   // Mostra le statistiche
-  const progress = workflow.getProgress(userId);
+  const progress = await workflow.getProgress(userId);
   console.log(`\n📊 Statistiche workflow:`);
   console.log(`Total fasi completate: ${progress.filter((p) => p.status === 'completed').length}`);
   console.log(`Timeline totale: ${progress.length} eventi registrati`);

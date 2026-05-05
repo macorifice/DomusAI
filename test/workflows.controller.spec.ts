@@ -11,6 +11,7 @@ import { EvaluationService } from '@common/evaluation.service';
 import { NegotiationService } from '@common/negotiation.service';
 import { WorkflowChecklistService } from '@workflows/workflow-checklist.service';
 import { WorkflowChecklistRepository } from '@workflows/workflow-checklist.repository';
+import { WorkflowStateRepository } from '@workflows/workflow-state.repository';
 
 describe('WorkflowsController checklist endpoint', () => {
   let controller: WorkflowsController;
@@ -30,6 +31,7 @@ describe('WorkflowsController checklist endpoint', () => {
         NegotiationService,
         WorkflowChecklistService,
         WorkflowChecklistRepository,
+        WorkflowStateRepository,
       ],
     }).compile();
 
@@ -54,7 +56,7 @@ describe('WorkflowsController checklist endpoint', () => {
       propertyType: 'apartment',
     });
 
-    const checklist = (await controller.getChecklist(userId)) as {
+    const checklist = (await controller.getChecklist(userId, userId)) as {
       steps?: Array<{ id: string; state: string }>;
       meta?: { requiresMortgage?: boolean };
     };
@@ -77,7 +79,7 @@ describe('WorkflowsController checklist endpoint', () => {
       budgetMax: 500000,
     });
 
-    const updated = (await controller.setChecklistStepStatus(userId, 'analyze-search-results', {
+    const updated = (await controller.setChecklistStepStatus(userId, 'analyze-search-results', userId, {
       done: true,
     })) as { steps?: Array<{ id: string; done: boolean; state: string }> };
 
@@ -99,7 +101,7 @@ describe('WorkflowsController checklist endpoint', () => {
     });
 
     await expect(
-      controller.setChecklistStepStatus(userId, 'collect-documents', {
+      controller.setChecklistStepStatus(userId, 'collect-documents', userId, {
         done: true,
       }),
     ).rejects.toThrow('Step non disponibile nella fase corrente');
@@ -117,7 +119,7 @@ describe('WorkflowsController checklist endpoint', () => {
       budgetMax: 500000,
     });
 
-    await expect(controller.evaluate(userId, {})).rejects.toThrow(
+    await expect(controller.evaluate(userId, userId, {})).rejects.toThrow(
       'Completa prima gli step obbligatori/raccomandati della fase corrente',
     );
   });

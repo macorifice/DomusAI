@@ -11,18 +11,10 @@ import { WorkflowState, Property, ExecutionResult } from '@models/types';
 import { Logger } from '@common/logger';
 import { WorkflowChecklistService, WorkflowChecklist } from './workflow-checklist.service';
 import { WorkflowChecklistRepository } from './workflow-checklist.repository';
+import { WorkflowStateRepository } from './workflow-state.repository';
+import type { WorkflowInput, WorkflowProgress } from './workflow-types';
 
-export interface WorkflowInput {
-  userId: string;
-  preferences: Record<string, any>;
-}
-
-export interface WorkflowProgress {
-  phase: string;
-  status: 'completed' | 'in-progress' | 'pending';
-  result?: any;
-  timestamp: Date;
-}
+export type { WorkflowInput, WorkflowProgress } from './workflow-types';
 
 @Injectable()
 export class PurchaseWorkflow {
@@ -37,6 +29,7 @@ export class PurchaseWorkflow {
     private readonly documentationAgent: DocumentationAgent,
     private readonly workflowChecklistService: WorkflowChecklistService,
     private readonly workflowChecklistRepository: WorkflowChecklistRepository,
+    private readonly workflowStateRepository: WorkflowStateRepository,
   ) {}
 
   /**
@@ -48,13 +41,14 @@ export class PurchaseWorkflow {
     const state: WorkflowState = {
       phase: 'search',
       userId: input.userId,
-      metadata: input.preferences,
+      metadata: input.preferences as Record<string, unknown>,
     };
 
     this.states.set(input.userId, state);
     this.history.set(input.userId, []);
     this.recordProgress(input.userId, 'setup', 'completed', { preferences: input.preferences });
 
+    await this.persist(input.userId);
     return state;
   }
 
@@ -62,7 +56,8 @@ export class PurchaseWorkflow {
    * Fase 1: Ricerca
    */
   async search(userId: string, searchCriteria: Record<string, any>): Promise<ExecutionResult> {
-    const state = this.getState(userId);
+    await this.ensureLoaded(userId);
+    const state = this.syncGetState(userId);
     this.logger.log(`Search phase initiated for user: ${userId}`);
 
     try {
@@ -84,6 +79,8 @@ export class PurchaseWorkflow {
       this.logger.error('Error in search phase', error as Error);
       this.recordProgress(userId, 'search', 'pending', { error: error instanceof Error ? error.message : 'Unknown error' });
       throw error;
+    } finally {
+      await this.persist(userId);
     }
   }
 
@@ -91,7 +88,8 @@ export class PurchaseWorkflow {
    * Fase 2: Valutazione
    */
   async evaluate(userId: string, property: Property): Promise<ExecutionResult> {
-    const state = this.getState(userId);
+    await this.ensureLoaded(userId);
+    const state = this.syncGetState(userId);
     this.logger.log(`Evaluation phase initiated for property: ${property.id}`);
 
     try {
@@ -113,6 +111,8 @@ export class PurchaseWorkflow {
       this.logger.error('Error in evaluation phase', error as Error);
       this.recordProgress(userId, 'evaluation', 'pending', { error: error instanceof Error ? error.message : 'Unknown error' });
       throw error;
+    } finally {
+      await this.persist(userId);
     }
   }
 
@@ -120,7 +120,8 @@ export class PurchaseWorkflow {
    * Fase 3: Negoziazione
    */
   async negotiate(userId: string, property: Property): Promise<ExecutionResult> {
-    const state = this.getState(userId);
+    await this.ensureLoaded(userId);
+    const state = this.syncGetState(userId);
     const evaluation = state.metadata.evaluation;
     const marketValue = evaluation?.estimatedValue || property.price;
 
@@ -152,6 +153,8 @@ export class PurchaseWorkflow {
       this.logger.error('Error in negotiation phase', error as Error);
       this.recordProgress(userId, 'negotiation', 'pending', { error: error instanceof Error ? error.message : 'Unknown error' });
       throw error;
+    } finally {
+      await this.persist(userId);
     }
   }
 
@@ -164,7 +167,8 @@ export class PurchaseWorkflow {
     region: string,
     documents?: string[],
   ): Promise<ExecutionResult> {
-    const state = this.getState(userId);
+    await this.ensureLoaded(userId);
+    const state = this.syncGetState(userId);
     this.logger.log(`Documentation phase initiated`);
 
     try {
@@ -190,6 +194,8 @@ export class PurchaseWorkflow {
       this.logger.error('Error in documentation phase', error as Error);
       this.recordProgress(userId, 'documentation', 'pending', { error: error instanceof Error ? error.message : 'Unknown error' });
       throw error;
+    } finally {
+      await this.persist(userId);
     }
   }
 
@@ -197,33 +203,33 @@ export class PurchaseWorkflow {
    * Completa il workflow
    */
   async complete(userId: string): Promise<WorkflowState> {
-    const state = this.getState(userId);
+    await this.ensureLoaded(userId);
+    const state = this.syncGetState(userId);
     state.phase = 'completed';
     this.recordProgress(userId, 'completion', 'completed', { status: 'workflow completed' });
     this.logger.log(`Workflow completed for user: ${userId}`);
+    await this.persist(userId);
     return state;
   }
 
   /**
-   * Ottieni lo stato del workflow
+   * Ottieni lo stato del workflow (carica da DB se necessario)
    */
-  getState(userId: string): WorkflowState {
-    const state = this.states.get(userId);
-    if (!state) {
-      throw new Error(`Workflow non trovato per l'utente ${userId}`);
-    }
-    return state;
+  async getState(userId: string): Promise<WorkflowState> {
+    await this.ensureLoaded(userId);
+    return this.syncGetState(userId);
   }
 
   /**
    * Ottieni la cronologia/progresso
    */
-  getProgress(userId: string): WorkflowProgress[] {
+  async getProgress(userId: string): Promise<WorkflowProgress[]> {
+    await this.ensureLoaded(userId);
     return this.history.get(userId) || [];
   }
 
   async getChecklist(userId: string): Promise<WorkflowChecklist> {
-    const state = this.getState(userId);
+    const state = await this.getState(userId);
     const fallback = this.workflowChecklistService.buildChecklist(state.metadata);
     const baseChecklist = (state.metadata?.checklist || fallback) as typeof fallback;
 
@@ -232,7 +238,7 @@ export class PurchaseWorkflow {
   }
 
   async setChecklistStepStatus(userId: string, stepId: string, done: boolean): Promise<WorkflowChecklist> {
-    const state = this.getState(userId);
+    const state = await this.getState(userId);
     const fallback = this.workflowChecklistService.buildChecklist(state.metadata);
     const baseChecklist = (state.metadata?.checklist || fallback) as typeof fallback;
 
@@ -246,6 +252,45 @@ export class PurchaseWorkflow {
 
     await this.workflowChecklistRepository.setStepStatus(userId, stepId, done);
     return this.getChecklist(userId);
+  }
+
+  /**
+   * Resetta il workflow (per testing e riavvio da zero)
+   */
+  async reset(userId: string): Promise<void> {
+    this.states.delete(userId);
+    this.history.delete(userId);
+    await this.workflowStateRepository.delete(userId);
+    this.logger.log(`Workflow reset for user: ${userId}`);
+  }
+
+  private async ensureLoaded(userId: string): Promise<void> {
+    if (this.states.has(userId)) {
+      return;
+    }
+    const loaded = await this.workflowStateRepository.load(userId);
+    if (!loaded) {
+      return;
+    }
+    this.states.set(userId, loaded.state);
+    this.history.set(userId, loaded.history);
+  }
+
+  private syncGetState(userId: string): WorkflowState {
+    const state = this.states.get(userId);
+    if (!state) {
+      throw new Error(`Workflow non trovato per l'utente ${userId}`);
+    }
+    return state;
+  }
+
+  private async persist(userId: string): Promise<void> {
+    const state = this.states.get(userId);
+    if (!state) {
+      return;
+    }
+    const hist = this.history.get(userId) || [];
+    await this.workflowStateRepository.save(userId, state, hist);
   }
 
   /**
@@ -265,14 +310,5 @@ export class PurchaseWorkflow {
       timestamp: new Date(),
     });
     this.history.set(userId, userHistory);
-  }
-
-  /**
-   * Resetta il workflow (per testing)
-   */
-  reset(userId: string): void {
-    this.states.delete(userId);
-    this.history.delete(userId);
-    this.logger.log(`Workflow reset for user: ${userId}`);
   }
 }
