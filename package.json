@@ -19,7 +19,7 @@
     "start:dev:all:clean": "npm run ports:free && npm run start:dev:all",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix --ignore-pattern \"frontend/**\"",
+    "lint": "eslint --no-eslintrc --config .eslintrc.js \"{src,apps,libs,test}/**/*.ts\" --fix",
     "lint:frontend": "npm run lint --prefix frontend",
     "test": "jest --watchman=false",
     "test:watch": "jest --watch",
